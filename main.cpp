@@ -1,7 +1,6 @@
 #include <iostream>
 #include <fstream>
 #include <filesystem>
-#include <iterator>
 #include <list>
 #include <string>
 #include <cstring> // memcmp()
@@ -14,12 +13,12 @@ bool binaryFileCompare(const File& file, const File& otherFile, uint32_t limit =
 
 class File {
     fs::directory_entry entry;
-    std::list<std::size_t> hashes;
+    std::size_t hash = 0;
     struct buffer {
         char buffer[512];
     };
     public:
-        File File(fs::directory_entry _entry) : entry(_entry) {}
+        File(fs::directory_entry _entry) : entry(_entry) {}
         const fs::directory_entry getEntry() const {
             return entry;
         }
@@ -31,8 +30,8 @@ class File {
             // TODO: Either switch to a single hash, or provide consecutive hashes of larger chunks of the file.
             // The latter option requires tracking how much of the file we hashed. Otherwise you will compare 2048 bytes
             // of one file to 4096 bytes of another.
-            if (!hashes.empty()) {
-                return hashes.front();
+            if (!hash) {
+                return hash;
             }
             std::ifstream f = std::ifstream(entry.path().stem().string(), std::ios::binary | std::ios::in);
             std::size_t to_hash = 2048;
@@ -42,8 +41,9 @@ class File {
             char* buf = new char[to_hash];
             f.seekg(0);
             f.read(buf, to_hash);
-            hashes.push_back(std::hash<char>{}(*buf));
-            return hashes.front();
+            hash = std::hash<char>{}(*buf);
+            delete[] buf;
+            return hash;
             //for (auto start = std::istream_iterator<buffer>{ f }, end = std::istream_iterator<buffer>{}; start != end; ++start) {}
         }
         bool operator==(File& otherFile) {
@@ -57,12 +57,6 @@ class File {
             // Carry out binary comparison (first 8 MB should be more than enough)
             return binaryFileCompare(*this, otherFile);
         }
-        /*
-        std::istream& operator>>(buffer& bytes) {
-            s.read(bytes.buffer, sizeof(bytes.buffer));
-            return s;
-        }
-        */
 };
 
 bool binaryFileCompare(const File& file, const File& otherFile, uint32_t limit) {
@@ -95,6 +89,7 @@ int main(int argc, char const *argv[]) {
       std::cout << "Usage: dupfinder DIRECTORY\n";
       return 0;
     }
+    std::unordered_map<fs::path, File>();
     fs::path directory(argv[1]);
     
     return 0;
