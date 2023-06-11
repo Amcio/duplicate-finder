@@ -5,20 +5,21 @@
 #include <list>
 #include <string>
 #include <cstring> // memcmp()
-
+#include <functional> // std::hash()
 namespace fs = std::filesystem;
 
 class File;
 
-bool binaryFileCompare(const File& file, const File& otherFile, uint32_t limit = 2048);
+bool binaryFileCompare(const File& file, const File& otherFile, uint32_t limit = 8192);
 
 class File {
     fs::directory_entry entry;
-    std::list<std::string> hashes;
+    std::list<std::size_t> hashes;
     struct buffer {
         char buffer[512];
     };
     public:
+        File File(fs::directory_entry _entry) : entry(_entry) {}
         const fs::directory_entry getEntry() const {
             return entry;
         }
@@ -26,18 +27,34 @@ class File {
         // Looks like it will be another iterator, because we want to evaluate one hash at a time.
         // A private property "scanned" should contain the position of the scanner (seek to).
         // Constructor and oprator==
-        void calculateHash() {
-            std::ifstream f = std::ifstream(entry.path().stem().string(), std::ios::binary | std::ios::in);
-            //for (auto start = std::istream_iterator<buffer>{ f }, end = std::istream_iterator<buffer>{}; start != end; ++start) {
-                
-            //}
-        }
-        bool operator==(const File& otherFile) {
-            if (entry.file_size() != otherFile.entry.file_size()) {
-              return false;
+        std::size_t calculateHash() {
+            // TODO: Either switch to a single hash, or provide consecutive hashes of larger chunks of the file.
+            // The latter option requires tracking how much of the file we hashed. Otherwise you will compare 2048 bytes
+            // of one file to 4096 bytes of another.
+            if (!hashes.empty()) {
+                return hashes.front();
             }
-            // Carry out binary comparison (first 2 MB should be more than enough)
-
+            std::ifstream f = std::ifstream(entry.path().stem().string(), std::ios::binary | std::ios::in);
+            std::size_t to_hash = 2048;
+            if (entry.file_size() < to_hash) {
+                to_hash = entry.file_size();
+            }
+            char* buf = new char[to_hash];
+            f.seekg(0);
+            f.read(buf, to_hash);
+            hashes.push_back(std::hash<char>{}(*buf));
+            return hashes.front();
+            //for (auto start = std::istream_iterator<buffer>{ f }, end = std::istream_iterator<buffer>{}; start != end; ++start) {}
+        }
+        bool operator==(File& otherFile) {
+            if (entry.file_size() != otherFile.entry.file_size()) {
+                return false;
+            }
+            // Compare hashes
+            if (this->calculateHash() != otherFile.calculateHash()) {
+                return false;
+            }
+            // Carry out binary comparison (first 8 MB should be more than enough)
             return binaryFileCompare(*this, otherFile);
         }
         /*
