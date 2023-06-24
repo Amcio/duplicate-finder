@@ -18,6 +18,7 @@ class File {
     //     char buffer[512];
     // };
     public:
+        File() {}
         File(fs::directory_entry _entry) : entry(_entry) {}
         const fs::directory_entry getEntry() const {
             return entry;
@@ -81,26 +82,30 @@ bool binaryFileCompare(const File& file, const File& otherFile, uint32_t limit) 
 }
 
 std::vector<fs::path> scanDirectory(const fs::path& directoryPath) {
+    std::unordered_map<fs::path, File> fileMap;
     for (const fs::directory_entry& entry : fs::recursive_directory_iterator(directoryPath)) {
         if (fs::is_regular_file(entry)) {
-            // actually, maybe use a hash map?
-            // Comparing each file to each file seems like a lot of work (O(n^2) ?
+            File file(entry); // Turn this into a shared pointer
+            fileMap[entry.path()] = file;
         }
     }
 }
 
-int main(int argc, char const *argv[]) {
-    // if (argc == 1 || fs::is_regular_file(fs::path(argv[1]))) {
-    //   std::cout << "Usage: dupfinder DIRECTORY\n";
-    //   return 0;
-    // }
-    // std::unordered_map<fs::path, File>();
-    // fs::path directory(argv[1]);
+void compareTest() {
     fs::path path1("test.txt"), path2("test1.txt");
     fs::directory_entry entry1(path1), entry2(path2);
     File file1(entry1), file2(entry2);
     if (file1 == file2) {
         std::cout << "files are equal\n";
     }
+}
+
+int main(int argc, char const *argv[]) {
+    if (argc == 1 || fs::is_regular_file(fs::path(argv[1]))) {
+      std::cout << "Usage: dupfinder DIRECTORY\n";
+      return 0;
+    }
+    std::unordered_map<fs::path, File>();
+    fs::path directory(argv[1]);
     return 0;
 }
