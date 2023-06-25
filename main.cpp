@@ -10,7 +10,7 @@ namespace fs = std::filesystem;
 
 class File;
 
-bool binaryFileCompare(const File& file, const File& otherFile, uint32_t limit = 4096);
+bool binaryFileCompare( File& file, File& otherFile, uint32_t limit = 4096);
 
 class File {
     fs::directory_entry entry;
@@ -29,10 +29,11 @@ class File {
             // TODO: Either switch to a single hash, or provide consecutive hashes of larger chunks of the file.
             // The latter option requires tracking how much of the file we hashed. Otherwise you will compare 2048 bytes
             // of one file to 4096 bytes of another.
-            if (!hash) {
+            if (hash) {
                 return hash;
             }
-            std::ifstream f = std::ifstream(entry.path().stem().string(), std::ios::binary | std::ios::in);
+            std::cout << "[DEBUG] Hashing file: " << entry.path().string() << "\n";
+            std::ifstream f = std::ifstream(entry.path().string(), std::ios::binary | std::ios::in);
             std::size_t to_hash = 2048;
             if (entry.file_size() < to_hash) {
                 to_hash = entry.file_size();
@@ -40,17 +41,10 @@ class File {
             char* buf = new char[to_hash];
             f.seekg(0);
             f.read(buf, to_hash);
-            hash = std::hash<char>{}(*buf);
+            hash = std::hash<std::string>{}(std::string(buf, to_hash));
             delete[] buf;
             return hash;
-            //for (auto start = std::istream_iterator<buffer>{ f }, end = std::istream_iterator<buffer>{}; start != end; ++start) {}
         }
-
-        struct PairComparator {
-            bool operator()(const std::pair<fs::path, fs::path>& a, const std::pair<fs::path, fs::path>& b) {
-                return (a.first == b.first && a.second == b.second) || (a.first == b.second && a.second == b.first);
-            }
-        };
 
         bool operator==(File& otherFile) {
             if (&otherFile == this) {
@@ -68,7 +62,23 @@ class File {
         }
 };
 
-bool binaryFileCompare(const File& file, const File& otherFile, uint32_t limit) {
+struct PairUtilities {
+    struct PairComparator {
+        bool operator()(const std::pair<fs::path, fs::path>& a, const std::pair<fs::path, fs::path>& b) const {
+            return (a.first == b.first && a.second == b.second) || (a.first == b.second && a.second == b.first);
+        }
+    };
+
+    struct PairHasher {
+        std::size_t operator()(const std::pair<fs::path, fs::path>& pair) const {
+            return std::hash<fs::path>{}(pair.first) ^ std::hash<fs::path>{}(pair.second); // Combine hashes of two elements (binary and)
+        }
+    };
+};
+
+bool binaryFileCompare(File& file,  File& otherFile, uint32_t limit) {
+    std::cout << "BINARY COMPARISON CALLED " << file.getEntry().path().string() << " and " << otherFile.getEntry().path().string() << "\n";
+    std::cout << "HASH 1 " << file.calculateHash() << " HASH 2 " << otherFile.calculateHash() << "\n";  
     std::ifstream fh = std::ifstream(file.getEntry().path().string(), std::ios::binary | std::ios::in);
     std::ifstream ofh = std::ifstream(otherFile.getEntry().path().string(), std::ios::binary | std::ios::in);
     char fileBuffer[512], otherBuffer[512];
@@ -100,13 +110,17 @@ std::unordered_map<fs::path, File> scanDirectory(const fs::path& directoryPath) 
     return fileMap;
 }
 
-std::unordered_set<std::pair<fs::path, fs::path>, File::PairComparator> findDuplicates(std::unordered_map<fs::path, File> fileMap) {
-    std::unordered_set<std::pair<fs::path, fs::path>, File::PairComparator> duplicateList;
+std::unordered_set<std::pair<fs::path, fs::path>, PairUtilities::PairHasher, PairUtilities::PairComparator> findDuplicates(std::unordered_map<fs::path, File> fileMap) {
+    std::unordered_set<std::pair<fs::path, fs::path>,PairUtilities::PairHasher, PairUtilities::PairComparator> duplicateList;
     // Here we should exclude pairs [a,b] [b,a], in a way that comparison never takes place!
     for (auto& pair : fileMap) {
         for (auto& otherPair : fileMap) {
+            std::pair<fs::path, fs::path> p(pair.first, otherPair.first);
+            if (duplicateList.count(p) == 1) {
+                continue; // Don't waste time comparing B to A if A was already compared to B
+            }
             if (pair.second == otherPair.second) {
-                duplicateList.insert(std::pair<fs::path, fs::path> {pair.first, otherPair.first});
+                duplicateList.insert(p); // Store paths to duplicates
             }
         }
     }
@@ -129,7 +143,7 @@ int main(int argc, char const *argv[]) {
     }
     fs::path directory(argv[1]);
     std::unordered_map<fs::path, File> fileMap = scanDirectory(directory);
-    std::unordered_set<std::pair<fs::path, fs::path>, File::PairComparator> duplicates = findDuplicates(fileMap);
+    std::unordered_set<std::pair<fs::path, fs::path>, PairUtilities::PairHasher, PairUtilities::PairComparator> duplicates = findDuplicates(fileMap);
     for (const auto& filePair : duplicates) {
         std::cout << "[*] Found duplicate: " << filePair.first << " and " << filePair.second << "\n";
     }
