@@ -1,7 +1,6 @@
 #include <iostream>
 #include <fstream>
 #include <filesystem>
-#include <list>
 #include <string>
 #include <cstring> // memcmp()
 #include <functional> // std::hash()
@@ -10,7 +9,7 @@ namespace fs = std::filesystem;
 
 class File;
 
-bool binaryFileCompare( File& file, File& otherFile, uint32_t limit = 4096);
+bool binaryFileCompare(const File& file, const File& otherFile, uint32_t limit = 4096);
 
 class File {
     fs::directory_entry entry;
@@ -18,21 +17,15 @@ class File {
     public:
         File() {}
         File(fs::directory_entry _entry) : entry(_entry) {}
+
         const fs::directory_entry getEntry() const {
             return entry;
         }
-        // GetHashes() should return the cached hashes, and if they're not there it should call calculateHashes().
-        // Looks like it will be another iterator, because we want to evaluate one hash at a time.
-        // A private property "scanned" should contain the position of the scanner (seek to).
-        // Constructor and oprator==
+
         std::size_t calculateHash() {
-            // TODO: Either switch to a single hash, or provide consecutive hashes of larger chunks of the file.
-            // The latter option requires tracking how much of the file we hashed. Otherwise you will compare 2048 bytes
-            // of one file to 4096 bytes of another.
             if (hash) {
                 return hash;
             }
-            std::cout << "[DEBUG] Hashing file: " << entry.path().string() << "\n";
             std::ifstream f = std::ifstream(entry.path().string(), std::ios::binary | std::ios::in);
             std::size_t to_hash = 2048;
             if (entry.file_size() < to_hash) {
@@ -76,9 +69,7 @@ struct PairUtilities {
     };
 };
 
-bool binaryFileCompare(File& file,  File& otherFile, uint32_t limit) {
-    std::cout << "BINARY COMPARISON CALLED " << file.getEntry().path().string() << " and " << otherFile.getEntry().path().string() << "\n";
-    std::cout << "HASH 1 " << file.calculateHash() << " HASH 2 " << otherFile.calculateHash() << "\n";  
+bool binaryFileCompare(const File& file, const File& otherFile, uint32_t limit) { 
     std::ifstream fh = std::ifstream(file.getEntry().path().string(), std::ios::binary | std::ios::in);
     std::ifstream ofh = std::ifstream(otherFile.getEntry().path().string(), std::ios::binary | std::ios::in);
     char fileBuffer[512], otherBuffer[512];
@@ -112,7 +103,6 @@ std::unordered_map<fs::path, File> scanDirectory(const fs::path& directoryPath) 
 
 std::unordered_set<std::pair<fs::path, fs::path>, PairUtilities::PairHasher, PairUtilities::PairComparator> findDuplicates(std::unordered_map<fs::path, File> fileMap) {
     std::unordered_set<std::pair<fs::path, fs::path>,PairUtilities::PairHasher, PairUtilities::PairComparator> duplicateList;
-    // Here we should exclude pairs [a,b] [b,a], in a way that comparison never takes place!
     for (auto& pair : fileMap) {
         for (auto& otherPair : fileMap) {
             std::pair<fs::path, fs::path> p(pair.first, otherPair.first);
