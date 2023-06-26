@@ -13,7 +13,7 @@ bool binaryFileCompare(const File& file, const File& otherFile, uint32_t limit =
 
 class File {
     fs::directory_entry entry;
-    std::size_t hash = 0;
+    mutable std::size_t hash = 0;
     public:
         File() {}
         File(fs::directory_entry _entry) : entry(_entry) {}
@@ -22,7 +22,11 @@ class File {
             return entry;
         }
 
-        std::size_t calculateHash() {
+        const std::string toString() const {
+            return entry.path().string();
+        }
+
+        std::size_t calculateHash() const {
             if (hash) {
                 return hash;
             }
@@ -39,7 +43,7 @@ class File {
             return hash;
         }
 
-        bool operator==(File& otherFile) {
+        bool operator==(const File& otherFile) const {
             if (&otherFile == this) {
                 return false; // A file is always a duplicate of itself, that's a false-positive
             }
@@ -53,6 +57,19 @@ class File {
             // Carry out binary comparison (first 4 MB should be more than enough)
             return binaryFileCompare(*this, otherFile);
         }
+        struct FileComparator {
+            bool operator()(const File& a, const File& b) const {
+                return a == b;
+            }
+        };
+};
+
+// std::hash implementation for File, used by hashmaps in the STL
+template<>
+struct std::hash<File> {
+    std::size_t operator()(const File& f) const {
+        return std::hash<fs::path>{}(f.getEntry().path());
+    }
 };
 
 struct PairUtilities {
@@ -90,15 +107,19 @@ bool binaryFileCompare(const File& file, const File& otherFile, uint32_t limit) 
     return true;
 }
 
-std::unordered_map<fs::path, File> scanDirectory(const fs::path& directoryPath) {
-    std::unordered_map<fs::path, File> fileMap;
+bool cmp(File a, File b) { return a == b; }
+
+std::unordered_set<File, std::hash<File>, File::FileComparator> scanDirectory(const fs::path& directoryPath) {
+    std::unordered_set<File, std::hash<File>, File::FileComparator> fileSet;
     for (const fs::directory_entry& entry : fs::recursive_directory_iterator(directoryPath)) {
         if (fs::is_regular_file(entry)) {
             File file(entry);
-            fileMap[entry.path()] = file;
+            if (auto [iter, success] = fileSet.insert(file); !success) {
+                std::cout << "[*] Found duplicate: " << iter->toString() << " and " << file.toString();
+            }
         }
     }
-    return fileMap;
+    return fileSet;
 }
 
 std::unordered_set<std::pair<fs::path, fs::path>, PairUtilities::PairHasher, PairUtilities::PairComparator> findDuplicates(std::unordered_map<fs::path, File> fileMap) {
@@ -132,10 +153,10 @@ int main(int argc, char const *argv[]) {
       return 0;
     }
     fs::path directory(argv[1]);
-    std::unordered_map<fs::path, File> fileMap = scanDirectory(directory);
-    std::unordered_set<std::pair<fs::path, fs::path>, PairUtilities::PairHasher, PairUtilities::PairComparator> duplicates = findDuplicates(fileMap);
-    for (const auto& filePair : duplicates) {
-        std::cout << "[*] Found duplicate: " << filePair.first << " and " << filePair.second << "\n";
-    }
+    std::unordered_set<File, std::hash<File>, File::FileComparator> fileSet = scanDirectory(directory);
+    // std::unordered_set<std::pair<fs::path, fs::path>, PairUtilities::PairHasher, PairUtilities::PairComparator> duplicates = findDuplicates(fileMap);
+    // for (const auto& filePair : duplicates) {
+    //     std::cout << "[*] Found duplicate: " << filePair.first << " and " << filePair.second << "\n";
+    // }
     return 0;
 }
