@@ -102,7 +102,7 @@ std::unordered_map<fs::path, File> scanDirectory(const fs::path& directoryPath) 
 }
 
 std::unordered_set<std::pair<fs::path, fs::path>, PairUtilities::PairHasher, PairUtilities::PairComparator> findDuplicates(std::unordered_map<fs::path, File> fileMap) {
-    std::unordered_set<std::pair<fs::path, fs::path>,PairUtilities::PairHasher, PairUtilities::PairComparator> duplicateList;
+    std::unordered_set<std::pair<fs::path, fs::path>, PairUtilities::PairHasher, PairUtilities::PairComparator> duplicateList;
     for (auto& pair : fileMap) {
         for (auto& otherPair : fileMap) {
             std::pair<fs::path, fs::path> p(pair.first, otherPair.first);
