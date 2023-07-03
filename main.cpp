@@ -80,13 +80,13 @@ bool binaryFileCompare(const File& file, const File& otherFile, uint32_t limit) 
       // If we are here it means the files have the same size, thus we should be able to read the same amount of data from them.
       // Therefore it doesn't matter which gcount is used.
       std::streamsize bytesRead = fh.gcount();
+      scanned += bytesRead;
       if (memcmp(fileBuffer, otherBuffer, bytesRead) != 0) {
         return false;
       }
-      // Check if EOF here
       fh.seekg(512, std::ios::cur);
       ofh.seekg(512, std::ios::cur);
-    } while (((fh.gcount() == ofh.gcount()) && (fh.gcount() == 512)) && (scanned < limit));
+    } while (((fh.gcount() == 512)) && (scanned < limit));
     return true;
 }
 
@@ -117,6 +117,28 @@ std::unordered_set<std::pair<fs::path, fs::path>, PairUtilities::PairHasher, Pai
     return duplicateList;
 }
 
+class ArgParser {
+    std::vector<std::string> tokens;
+    public:
+        ArgParser(int& argc, char* argv[]) {
+            for (int i = 1; i < argc; ++i) {
+                this->tokens.push_back(std::string(argv[i]));
+            }
+        }
+        const std::string getDirectory() const {
+            for (std::string token : tokens) {
+                if (token[0] == '-') {
+                    continue;
+                }
+                return token;
+            }
+            return std::string("./");
+        }
+        bool isOption(const std::string& option) const {
+            return std::find(this->tokens.begin(), this->tokens.end(), option) != this->tokens.end();
+        }
+};
+
 void compareTest() {
     fs::path path1("test.txt"), path2("test1.txt");
     fs::directory_entry entry1(path1), entry2(path2);
@@ -126,16 +148,24 @@ void compareTest() {
     }
 }
 
-int main(int argc, char const *argv[]) {
-    if (argc == 1 || fs::is_regular_file(fs::path(argv[1]))) {
-      std::cout << "Usage: dupfinder DIRECTORY\n";
+int main(int argc, char *argv[]) {
+    ArgParser parser(argc, argv);
+    if (parser.isOption("-h") || parser.isOption("--help")) {
+      std::cout << "Usage: dupfinder [--csv] DIRECTORY\n";
       return 0;
     }
-    fs::path directory(argv[1]);
+    fs::path directory(parser.getDirectory());
     std::unordered_map<fs::path, File> fileMap = scanDirectory(directory);
     std::unordered_set<std::pair<fs::path, fs::path>, PairUtilities::PairHasher, PairUtilities::PairComparator> duplicates = findDuplicates(fileMap);
-    for (const auto& filePair : duplicates) {
-        std::cout << "[*] Found duplicate: " << filePair.first << " and " << filePair.second << "\n";
+    if (parser.isOption("--csv")) {
+        for (const auto& filePair : duplicates) {
+            std::cout << filePair.first << ',' << filePair.second << "\n";
+        }
+    } else {
+        for (const auto& filePair : duplicates) {
+            std::cout << "[*] Found duplicate: " << filePair.first << " and " << filePair.second << "\n";
+        }
     }
+
     return 0;
 }
