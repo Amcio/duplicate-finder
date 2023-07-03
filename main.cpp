@@ -1,3 +1,4 @@
+// Michał Markiel Makro 2022/23
 #include <iostream>
 #include <fstream>
 #include <filesystem>
@@ -86,7 +87,7 @@ bool binaryFileCompare(const File& file, const File& otherFile, uint32_t limit) 
       }
       fh.seekg(512, std::ios::cur);
       ofh.seekg(512, std::ios::cur);
-    } while (((fh.gcount() == 512)) && (scanned < limit));
+    } while ((fh.gcount() == 512) && (scanned < limit));
     return true;
 }
 
@@ -138,15 +139,6 @@ class ArgParser {
             return std::find(this->tokens.begin(), this->tokens.end(), option) != this->tokens.end();
         }
 };
-
-void compareTest() {
-    fs::path path1("test.txt"), path2("test1.txt");
-    fs::directory_entry entry1(path1), entry2(path2);
-    File file1(entry1), file2(entry2);
-    if (file1 == file2) {
-        std::cout << "files are equal\n";
-    }
-}
 
 int main(int argc, char *argv[]) {
     ArgParser parser(argc, argv);
